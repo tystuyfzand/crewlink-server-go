@@ -89,8 +89,6 @@ func main() {
 	})
 
 	server.On("join", func(c *gosocketio.Channel, code string, id uint64) {
-		log.Println("Join", code, id)
-
 		conn := m.Get(c.Id())
 
 		if conn != nil {
@@ -123,7 +121,6 @@ func main() {
 	})
 
 	server.On("id", func(c *gosocketio.Channel, id uint64) {
-		log.Println("Id", id)
 		playerIdMutex.Lock()
 		defer playerIdMutex.Unlock()
 
@@ -137,8 +134,6 @@ func main() {
 	})
 
 	server.On("signal", func(c *gosocketio.Channel, signal Signal) {
-		log.Println("Signal", signal.To, signal.Data)
-
 		ch, err := server.GetChannel(signal.To)
 
 		if err == nil {
@@ -148,6 +143,7 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
+	r.Use(schemeSetter)
 	r.Handle("/socket.io/", server)
 
 	offsetHandler := http.FileServer(offsetBox)
@@ -170,10 +166,6 @@ func main() {
 	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Scheme == "" {
-			r.URL.Scheme = "http"
-		}
-
 		mainTemplate.Execute(w, stats{
 			Address:   r.URL.Scheme + "://" + r.Host,
 			Connected: atomic.LoadInt64(&connected),
@@ -181,10 +173,6 @@ func main() {
 	})
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Scheme == "" {
-			r.URL.Scheme = "http"
-		}
-
 		json.NewEncoder(w).Encode(healthStatus{
 			Uptime:            uint64(time.Now().Sub(startTime) / time.Second),
 			Connections:       atomic.LoadInt64(&connected),
@@ -203,4 +191,19 @@ func main() {
 	log.Println("Launching server on", address)
 
 	log.Fatalln(http.ListenAndServe(address, r))
+}
+
+func schemeSetter(next http.Handler) http.Handler {
+	fn := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Scheme == "" {
+			r.URL.Scheme = "http"
+		}
+
+		if forwardedProto := r.Header.Get("X-Forwarded-Proto"); forwardedProto != "" {
+			r.URL.Scheme = forwardedProto
+		}
+
+		next.ServeHTTP(w, r)
+	}
+	return http.HandlerFunc(fn)
 }
