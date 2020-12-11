@@ -38,6 +38,8 @@
 
 This is the relay server for CrewLink, an Among Us proximity voice chat program, written in Go instead of JavaScript. It is aiming to handle many more users at once, as well as potentially offering an all-in-one solution that includes a STUN/TURN server.
 
+This project is likely UNUSABLE, but will become a fully usable and feature-complete server in time.
+
 ## Environment Variables
 
 Optional environment variables:
