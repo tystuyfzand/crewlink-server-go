@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/gobuffalo/packr/v2"
@@ -11,8 +12,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var (
@@ -25,6 +28,14 @@ type stats struct {
 	Connected int64
 }
 
+type healthStatus struct {
+	Uptime            uint64   `json:"uptime"`
+	Connections       int64    `json:"connectionCount"`
+	Address           string   `json:"address"`
+	Name              string   `json:"name"`
+	SupportedVersions []string `json:"supportedVersions"`
+}
+
 type Signal struct {
 	Data interface{} `json:"data"`
 	To   string      `json:"to,omitempty"`
@@ -32,6 +43,8 @@ type Signal struct {
 }
 
 func main() {
+	startTime := time.Now()
+
 	offsetBox := packr.New("Offsets", "./offsets")
 	assetBox := packr.New("Assets", "./assets")
 
@@ -47,7 +60,11 @@ func main() {
 
 	mainTemplate := template.Must(template.New("").Parse(str))
 
-	log.Println("Files:", offsetBox.List())
+	supportedVersions := offsetBox.List()
+
+	for i, version := range supportedVersions {
+		supportedVersions[i] = strings.TrimSuffix(version, ".yml")
+	}
 
 	server := gosocketio.NewServer(transport.GetDefaultWebsocketTransport())
 
@@ -149,9 +166,27 @@ func main() {
 	})
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Scheme == "" {
+			r.URL.Scheme = "http"
+		}
+
 		mainTemplate.Execute(w, stats{
-			Address:   r.Proto + "://" + r.Host,
+			Address:   r.URL.Scheme + "://" + r.Host,
 			Connected: atomic.LoadInt64(&connected),
+		})
+	})
+
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Scheme == "" {
+			r.URL.Scheme = "http"
+		}
+
+		json.NewEncoder(w).Encode(healthStatus{
+			Uptime:            uint64(time.Now().Sub(startTime) / time.Second),
+			Connections:       atomic.LoadInt64(&connected),
+			Address:           r.URL.Scheme + "://" + r.Host,
+			Name:              "CrewLink-Go",
+			SupportedVersions: supportedVersions,
 		})
 	})
 
