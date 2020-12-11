@@ -21,6 +21,7 @@ import (
 var (
 	playerIds     = make(map[string]uint64)
 	playerIdMutex = &sync.RWMutex{}
+	cacheSince    = time.Now().Format(http.TimeFormat)
 )
 
 type stats struct {
@@ -161,6 +162,9 @@ func main() {
 	r.Get("/logo.png", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		w.Header().Set("Content-Length", strconv.Itoa(len(logoBytes)))
+		w.Header().Set("Cache-Control", "max-age:290304000, public")
+		w.Header().Set("Last-Modified", cacheSince)
+		w.Header().Set("Expires", time.Now().AddDate(0, 0, 30).Format(http.TimeFormat))
 
 		w.Write(logoBytes)
 	})
