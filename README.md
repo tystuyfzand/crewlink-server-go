@@ -11,9 +11,9 @@
   <p align="center">
     Go Voice Relay server for <a href="https://github.com/ottomated/crewlink">CrewLink</a>.
     <br />
-    <a href="https://github.com/ottomated/crewlink-server/issues">Report Bug</a>
+    <a href="https://github.com/tystuyfzand/crewlink-server-go/issues">Report Bug</a>
     ·
-    <a href="https://github.com/ottomated/crewlink-server/issues">Request Feature</a>
+    <a href="https://github.com/tystuyfzand/crewlink-server-go/issues">Request Feature</a>
   </p>
 </p>
 

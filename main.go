@@ -1,159 +1,160 @@
 package main
 
 import (
-    "github.com/go-chi/chi"
-    "github.com/go-chi/chi/middleware"
-    "github.com/gobuffalo/packr/v2"
-    "github.com/tystuyfzand/gosf-socketio"
-    "github.com/tystuyfzand/gosf-socketio/transport"
-    "html/template"
-    "log"
-    "net/http"
-    "os"
-    "strconv"
-    "sync"
-    "sync/atomic"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
+	"github.com/gobuffalo/packr/v2"
+	"github.com/tystuyfzand/gosf-socketio"
+	"github.com/tystuyfzand/gosf-socketio/transport"
+	"html/template"
+	"log"
+	"net/http"
+	"os"
+	"strconv"
+	"sync"
+	"sync/atomic"
 )
 
 var (
-    playerIds = make(map[string]uint64)
-    playerIdMutex = &sync.RWMutex{}
+	playerIds     = make(map[string]uint64)
+	playerIdMutex = &sync.RWMutex{}
 )
 
 type stats struct {
-    Address string
-    Connected int64
+	Address   string
+	Connected int64
 }
 
 func main() {
-    offsetBox := packr.New("Offsets", "./offsets")
-    assetBox := packr.New("Assets", "./assets")
+	offsetBox := packr.New("Offsets", "./offsets")
+	assetBox := packr.New("Assets", "./assets")
 
-    str, err := assetBox.FindString("views/index.gohtml")
+	str, err := assetBox.FindString("views/index.gohtml")
 
-    if err != nil {
-        log.Fatalln("Unable to load index template:", err)
-    }
+	if err != nil {
+		log.Fatalln("Unable to load index template:", err)
+	}
 
-    address := "0.0.0.0:9736"
+	var connected int64
 
-    if envAddress := os.Getenv("ADDRESS"); envAddress != "" {
-        address = envAddress
-    }
+	m := &ConnectionMap{m: make(map[string]*Connection), l: &sync.RWMutex{}}
 
-    s := stats{
-        Address: address,
-    }
+	mainTemplate := template.Must(template.New("").Parse(str))
 
-    m := &ConnectionMap{m: make(map[string]*Connection), l: &sync.RWMutex{}}
+	log.Println("Files:", offsetBox.List())
 
-    mainTemplate := template.Must(template.New("").Parse(str))
+	server := gosocketio.NewServer(transport.GetDefaultWebsocketTransport())
 
-    log.Println("Files:", offsetBox.List())
+	server.On(gosocketio.OnConnection, func(c *gosocketio.Channel) {
+		log.Println("New client connected", c.Id())
 
-    server := gosocketio.NewServer(transport.GetDefaultWebsocketTransport())
+		atomic.AddInt64(&connected, 1)
 
-    server.On(gosocketio.OnConnection, func(c *gosocketio.Channel) {
-        log.Println("New client connected", c.Id())
+		m.Set(c.Id(), &Connection{channel: c})
+	})
 
-        atomic.AddInt64(&s.Connected, 1)
+	server.On(gosocketio.OnDisconnection, func(c *gosocketio.Channel) {
+		log.Println("Client disconnected", c.Id())
 
-        m.Set(c.Id(), &Connection{channel: c})
-    })
+		atomic.AddInt64(&connected, -1)
 
-    server.On(gosocketio.OnDisconnection, func(c *gosocketio.Channel) {
-        log.Println("Client disconnected", c.Id())
+		playerIdMutex.Lock()
+		defer playerIdMutex.Unlock()
 
-        atomic.AddInt64(&s.Connected, -1)
+		delete(playerIds, c.Id())
+	})
 
-        playerIdMutex.Lock()
-        defer playerIdMutex.Unlock()
+	server.On("join", func(c *gosocketio.Channel, code string, id uint64) {
+		log.Println("Join", code, id)
 
-        delete(playerIds, c.Id())
-    })
+		conn := m.Get(c.Id())
 
-    server.On("join", func(c *gosocketio.Channel, code string, id uint64) {
-        log.Println("Join", code, id)
+		if conn != nil {
+			conn.code = code
+			c.Join(conn.code)
 
-        conn := m.Get(c.Id())
+			c.BroadcastTo(conn.code, "join", []interface{}{c.Id(), id})
 
-        if conn != nil {
-            conn.code = code
-            c.Join(conn.code)
+			idMap := make(map[string]uint64)
 
-            c.BroadcastTo(conn.code, "join", []interface{}{c.Id(), id})
+			playerIdMutex.RLock()
 
-            idMap := make(map[string]uint64)
+			for _, ch := range c.List(conn.code) {
+				idMap[ch.Id()] = playerIds[c.Id()]
+			}
 
-            playerIdMutex.RLock()
+			playerIdMutex.RUnlock()
 
-            for _, ch := range c.List(conn.code) {
-                idMap[ch.Id()] = playerIds[c.Id()]
-            }
+			c.Emit("setIds", idMap)
+		}
+	})
 
-            playerIdMutex.RUnlock()
+	server.On("leave", func(c *gosocketio.Channel) {
+		conn := m.Get(c.Id())
 
-            c.Emit("setIds", idMap)
-        }
-    })
+		if conn != nil && conn.code != "" {
+			c.Leave(conn.code)
+			conn.code = ""
+		}
+	})
 
-    server.On("leave", func(c *gosocketio.Channel) {
-        conn := m.Get(c.Id())
+	server.On("id", func(c *gosocketio.Channel, id uint64) {
+		log.Println("Id", id)
+		playerIdMutex.Lock()
+		defer playerIdMutex.Unlock()
 
-        if conn != nil && conn.code != "" {
-            c.Leave(conn.code)
-            conn.code = ""
-        }
-    })
+		playerIds[c.Id()] = id
 
-    server.On("id", func(c *gosocketio.Channel, id uint64) {
-        log.Println("Id", id)
-        playerIdMutex.Lock()
-        defer playerIdMutex.Unlock()
+		conn := m.Get(c.Id())
 
-        playerIds[c.Id()] = id
+		if conn != nil {
+			c.BroadcastTo(conn.code, "setId", []interface{}{c.Id(), id})
+		}
+	})
 
-        conn := m.Get(c.Id())
+	server.On("signal", func(c *gosocketio.Channel, data, to string) {
+		log.Println("Signal", data, to)
 
-        if conn != nil {
-            c.BroadcastTo(conn.code, "setId", []interface{}{c.Id(), id})
-        }
-    })
+		ch, err := server.GetChannel(to)
 
-    server.On("signal", func(c *gosocketio.Channel, data, to string) {
-        log.Println("Signal", data, to)
+		if err == nil {
+			// TODO: This is a map in CrewLink-server, but data has no key...
+			ch.Emit("signal", []interface{}{data, c.Id()})
+		}
+	})
 
-        ch, err := server.GetChannel(to)
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Handle("/socket.io/", server)
 
-        if err == nil {
-            // TODO: This is a map in CrewLink-server, but data has no key...
-            ch.Emit("signal", []interface{}{data, c.Id()})
-        }
-    })
+	offsetHandler := http.FileServer(offsetBox)
 
-    r := chi.NewRouter()
-    r.Use(middleware.Logger)
-    r.Handle("/socket.io/", server)
+	for _, name := range offsetBox.List() {
+		r.Handle("/"+name, offsetHandler)
+	}
 
-    offsetHandler := http.FileServer(offsetBox)
+	logoBytes, _ := assetBox.Find("images/logo.png")
 
-    for _, name := range offsetBox.List() {
-        r.Handle("/" + name, offsetHandler)
-    }
+	// TODO better way to do this?
+	r.Get("/logo.png", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Content-Length", strconv.Itoa(len(logoBytes)))
 
-    logoBytes, _ := assetBox.Find("images/logo.png")
+		w.Write(logoBytes)
+	})
 
-    // TODO better way to do this?
-    r.Get("/logo.png", func(w http.ResponseWriter, r *http.Request) {
-        w.Header().Set("Content-Type", "image/png")
-        w.Header().Set("Content-Length", strconv.Itoa(len(logoBytes)))
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		mainTemplate.Execute(w, stats{
+			Address:   r.Proto + "://" + r.Host,
+			Connected: atomic.LoadInt64(&connected),
+		})
+	})
 
-        w.Write(logoBytes)
-    })
+	address := ":9736"
 
-    r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-        mainTemplate.Execute(w, s)
-    })
+	if envAddress := os.Getenv("ADDRESS"); envAddress != "" {
+		address = envAddress
+	}
 
-    log.Panic(http.ListenAndServe(":9736", r))
+	log.Fatalln(http.ListenAndServe(address, r))
 }
