@@ -25,6 +25,12 @@ type stats struct {
 	Connected int64
 }
 
+type Signal struct {
+	Data interface{} `json:"data"`
+	To   string      `json:"to,omitempty"`
+	From string      `json:"from,omitempty"`
+}
+
 func main() {
 	offsetBox := packr.New("Offsets", "./offsets")
 	assetBox := packr.New("Assets", "./assets")
@@ -112,14 +118,13 @@ func main() {
 		}
 	})
 
-	server.On("signal", func(c *gosocketio.Channel, data, to string) {
-		log.Println("Signal", data, to)
+	server.On("signal", func(c *gosocketio.Channel, signal Signal) {
+		log.Println("Signal", signal.To, signal.Data)
 
-		ch, err := server.GetChannel(to)
+		ch, err := server.GetChannel(signal.To)
 
 		if err == nil {
-			// TODO: This is a map in CrewLink-server, but data has no key...
-			ch.Emit("signal", []interface{}{data, c.Id()})
+			ch.Emit("signal", Signal{Data: signal.Data, From: c.Id()})
 		}
 	})
 
