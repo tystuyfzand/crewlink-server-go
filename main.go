@@ -196,5 +196,7 @@ func main() {
 		address = envAddress
 	}
 
+	log.Println("Launching server on", address)
+
 	log.Fatalln(http.ListenAndServe(address, r))
 }
