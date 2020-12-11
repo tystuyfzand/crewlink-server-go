@@ -1,4 +1,4 @@
-[![GPL-3.0 License][license-shield]][license-url]
+[![ISC License][license-shield]][license-url] [![Docker Pulls][docker-shield]][docker-url]
 
 <br />
 <p align="center">
@@ -44,16 +44,36 @@ This project is likely UNUSABLE, but will become a fully usable and feature-comp
 
 Optional environment variables:
 
-- `ADDRESS`: Specifies the server domain
-- `NAME`: Specifies the server name
+- `ADDRESS`: Specifies the server bind address. The Web UI will show whatever address the client actually connects as.
 
 ## Docker Quickstart
 
-Coming soon!
+Run the server with [Docker](https://docs.docker.com/get-docker/) by running the following command:
+
+```
+docker run -d -p 9736:9736 tystuyfzand/crewlink-server-go:latest
+```
+
+To change the external port the server uses, change the *first* instance of the port. For example, to use port 8123:
+
+```
+docker run -d -p 8123:9736 tystuyfzand/crewlink-server-go:latest
+```
 
 ### Building the Docker Image
 
-Coming soon!
+To build your own Docker image, do the following:
+
+1. Clone the repo
+```sh
+git clone https://github.com/tystuyfzand/crewlink-server-go.git
+cd crewlink-server-go
+```
+
+2. Run the Docker build command:
+```sh
+docker build -t tystuyfzand/crewlink-server:build .
+```
 
 ## Manual Installation
 
@@ -98,3 +118,5 @@ Distributed under the ISC License. See `LICENSE` for more information.
 
 [license-shield]: https://img.shields.io/github/license/tystuyfzand/crewlink-server-go.svg?style=flat-square
 [license-url]: https://github.com/tystuyfzand/crewlink-server-go/blob/master/LICENSE
+[docker-shield]: https://img.shields.io/docker/pulls/tystuyfzand/crewlink-server-go
+[docker-url]: https://hub.docker.com/repository/docker/tystuyfzand/crewlink-server-go
