@@ -38,13 +38,30 @@
 
 This is the relay server for CrewLink, an Among Us proximity voice chat program, written in Go instead of JavaScript. It is aiming to handle many more users at once, as well as potentially offering an all-in-one solution that includes a STUN/TURN server.
 
-This project is likely UNUSABLE, but will become a fully usable and feature-complete server in time.
+This project is under heavy development and SHOULD work just the same as the base server. It will also support the most relevant Pull Requests for future support.
+
+## Features
+
+Every feature in the main server is currently implemented.
+
+Additionally, the following features are implemented ahead of acceptance into the main server/client:
+
+- [Allow server host to decide peer to peer behavior (STUN/TURN support to bypass NAT issues)](https://github.com/ottomated/CrewLink-server/pull/28)
+
+The following features are planned, and I'd welcome pull requests for:
+
+- Automatic TLS via Go's `autocert` package
+- [Room-specific settings](https://github.com/ottomated/CrewLink-server/pull/39)
 
 ## Environment Variables
 
 Optional environment variables:
 
 - `ADDRESS`: Specifies the server bind address. The Web UI will show whatever address the client actually connects as.
+- `NAME`: Specifies the server name. Only used in the `/health` endpoint.
+- `TRUSTED_PROXIES`: Specifies trusted proxy addresses for IP and Scheme detection. Default is `10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`, you should change this if you use a public IP (for example, Cloudflare)
+- `LOG_REQUESTS`: Enables request logging from the internal http server. Only logs requests to `/`, `/logo.png`, and the initial websocket connection.
+- `CERTIFICATE_PATH`: Specifies directory to search for certificates. Currently, certificates must be named `server.(crt|key)` or Let's Encrypt's default `fullchain.pem` and `privkey.pem`.
 
 ## Docker Quickstart
 
@@ -92,7 +109,7 @@ cd crewlink-server-go
 ```
 2. Build the binary
 ```sh
-go build -o crewlink
+go build -o crewlink cmd/main.go
 ```
 3. Run the project
 ```JS
