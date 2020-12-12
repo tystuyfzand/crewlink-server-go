@@ -9,6 +9,7 @@ import (
 	"github.com/tystuyfzand/gosf-socketio"
 	"github.com/tystuyfzand/gosf-socketio/transport"
 	"html/template"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -239,8 +240,14 @@ func (s *Server) onConnection(c *gosocketio.Channel) {
 			config := *s.peerConfig
 
 			// TODO: c.Request().Host might not be perfect, but should get us a host they can use for now.
+			host := c.Request().Host
+
+			if splitHost, _, err := net.SplitHostPort(host); err == nil {
+				host = splitHost
+			}
+
 			config.TurnServers = []ICEServer{
-				{URL: "turn:" + c.Request().Host, Username: c.Id(), Credential: password},
+				{URL: "turn:" + host, Username: c.Id(), Credential: password},
 			}
 
 			c.Emit("peerConfig", config)
