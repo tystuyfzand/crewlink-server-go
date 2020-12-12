@@ -246,6 +246,10 @@ func (s *Server) onId(c *gosocketio.Channel, id uint64) {
 	conn := s.connections.Get(c.Id())
 
 	if conn != nil {
+		log.WithFields(log.Fields{
+			"id":     c.Id(),
+			"gameId": id,
+		}).Debug("Client set id")
 		c.BroadcastTo(conn.code, "setId", []interface{}{c.Id(), id})
 	}
 }
