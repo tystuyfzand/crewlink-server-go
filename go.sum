@@ -219,6 +219,8 @@ github.com/subosito/gotenv v1.2.0/go.mod h1:N0PQaV/YGNqwC0u51sEeR/aUtSLEXKX9iv69
 github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5/go.mod h1:ncp9v5uamzpCO7NfCPTXjqaC+bZgJeR0sMTm6dMHP7U=
 github.com/tystuyfzand/gosf-socketio v0.0.0-20201212134800-34003357bfc9 h1:i5TbuNHon5G8TROQJSoV2CA29i6yFGryQO8cQnUykOs=
 github.com/tystuyfzand/gosf-socketio v0.0.0-20201212134800-34003357bfc9/go.mod h1:RHOLfWazNDLReuMrVmgXEFrF++NvCtn3qgKa7aO/IwI=
+github.com/tystuyfzand/gosf-socketio v0.0.0-20201212145925-a68398d8bbff h1:QIe63pCrOxGuU7bggKzx6XMmti1ANdpFW2LykgT3Je0=
+github.com/tystuyfzand/gosf-socketio v0.0.0-20201212145925-a68398d8bbff/go.mod h1:RHOLfWazNDLReuMrVmgXEFrF++NvCtn3qgKa7aO/IwI=
 github.com/tystuyfzand/proxy v1.0.1-0.20201212141057-9489b54f1b8c h1:DGqqPMI+fNvLk40LZAIsZbEsXjLLeSK47EmRpaSU37s=
 github.com/tystuyfzand/proxy v1.0.1-0.20201212141057-9489b54f1b8c/go.mod h1:JNqQSJnLWK/5Ajdl8+xALY4s+eXJs+XnG9OhEr0RECk=
 github.com/ugorji/go v1.1.4/go.mod h1:uQMGLiO92mf5W77hV/PUCpI3pbzQx3CRekS0kk+RGrc=
