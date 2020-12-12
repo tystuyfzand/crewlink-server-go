@@ -4,10 +4,10 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/gobuffalo/packr/v2"
+	log "github.com/sirupsen/logrus"
 	"github.com/tystuyfzand/gosf-socketio"
 	"github.com/tystuyfzand/gosf-socketio/transport"
 	"html/template"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,15 +31,16 @@ type Signal struct {
 
 // Server represents a CrewLink server instance.
 type Server struct {
-	server            *gosocketio.Server
-	connected         int64
-	connections       *ConnectionMap
-	playerIds         map[string]uint64
-	playerIdMutex     *sync.RWMutex
-	startTime         time.Time
-	supportedVersions []string
+	server        *gosocketio.Server
+	connected     int64
+	connections   *ConnectionMap
+	playerIds     map[string]uint64
+	playerIdMutex *sync.RWMutex
+	startTime     time.Time
 
-	Name string
+	Name              string
+	supportedVersions []string
+	peerConfig        *PeerConfig
 }
 
 // NewServer constructs a new server with the given options.
@@ -61,6 +62,20 @@ func NewServer(opts ...Option) *Server {
 func WithName(name string) Option {
 	return func(s *Server) {
 		s.Name = name
+	}
+}
+
+// WithVersions sets the server's supported versions
+func WithVersions(versions []string) Option {
+	return func(s *Server) {
+		s.supportedVersions = versions
+	}
+}
+
+// WithPeerConfig sets the server's peer config
+func WithPeerConfig(config *PeerConfig) Option {
+	return func(s *Server) {
+		s.peerConfig = config
 	}
 }
 
@@ -97,13 +112,15 @@ func (s *Server) Start(addr string) error {
 
 	mainTemplate := template.Must(template.New("").Parse(str))
 
-	supportedVersions := offsetBox.List()
+	if s.supportedVersions == nil {
+		supportedVersions := offsetBox.List()
 
-	for i, version := range supportedVersions {
-		supportedVersions[i] = strings.TrimSuffix(version, ".yml")
+		for i, version := range supportedVersions {
+			supportedVersions[i] = strings.TrimSuffix(version, ".yml")
+		}
+
+		s.supportedVersions = supportedVersions
 	}
-
-	s.supportedVersions = supportedVersions
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -139,21 +156,30 @@ func (s *Server) Start(addr string) error {
 
 	r.Get("/health", s.httpHealth)
 
+	log.WithField("address", addr).Info("Listening")
+
 	return http.ListenAndServe(addr, r)
 }
 
 // onConnection handles new socket.io connections
 func (s *Server) onConnection(c *gosocketio.Channel) {
-	log.Println("New client connected", c.Id())
+	log.WithField("id", c.Id()).Debug("New client connected")
 
 	atomic.AddInt64(&s.connected, 1)
 
 	s.connections.Set(c.Id(), &Connection{channel: c})
+
+	if s.peerConfig != nil {
+		// Upcoming support for peer config
+		// See: https://github.com/ottomated/CrewLink-server/pull/28
+		// AND https://github.com/ottomated/CrewLink/pull/149
+		c.Emit("peerConfig", s.peerConfig)
+	}
 }
 
 // onDisconnection handles client disconnects, removing their playerId from the list
 func (s *Server) onDisconnection(c *gosocketio.Channel) {
-	log.Println("Client disconnected", c.Id())
+	log.WithField("id", c.Id()).Debug("Client disconnected")
 
 	atomic.AddInt64(&s.connected, -1)
 
@@ -168,6 +194,11 @@ func (s *Server) onJoin(c *gosocketio.Channel, code string, id uint64) {
 	conn := s.connections.Get(c.Id())
 
 	if conn != nil {
+		log.WithFields(log.Fields{
+			"id":   c.Id(),
+			"code": code,
+		}).Debug("Client joined room")
+
 		conn.code = code
 		c.Join(conn.code)
 
@@ -196,6 +227,11 @@ func (s *Server) onLeave(c *gosocketio.Channel) {
 	conn := s.connections.Get(c.Id())
 
 	if conn != nil && conn.code != "" {
+		log.WithFields(log.Fields{
+			"id":   c.Id(),
+			"code": conn.code,
+		}).Debug("Client left room")
+
 		c.Leave(conn.code)
 		conn.code = ""
 	}
