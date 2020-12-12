@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"meow.tf/crewlink-server"
@@ -20,11 +19,7 @@ func main() {
 	viper.AddConfigPath(".")
 
 	// Optionally load config
-	err := viper.ReadInConfig()
-
-	if err != nil && !errors.Is(err, viper.ConfigFileNotFoundError{}) {
-		log.WithError(err).Fatalln("Unable to load config")
-	}
+	viper.ReadInConfig()
 
 	if logLevelStr := viper.GetString("logLevel"); logLevelStr != "" {
 		level, err := log.ParseLevel(logLevelStr)
