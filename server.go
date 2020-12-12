@@ -123,9 +123,8 @@ func (s *Server) Start(addr string) error {
 	}
 
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(schemeSetter)
-	r.Use(urlCleaner)
+	r.Use(middleware.Logger, middleware.RealIP, middleware.CleanPath, schemeSetter)
+
 	r.Handle("/socket.io/", s.server)
 
 	offsetHandler := http.FileServer(offsetBox)
@@ -183,6 +182,8 @@ func (s *Server) onDisconnection(c *gosocketio.Channel) {
 
 	atomic.AddInt64(&s.connected, -1)
 
+	s.connections.Remove(c.Id())
+
 	s.playerIdMutex.Lock()
 	defer s.playerIdMutex.Unlock()
 
@@ -204,16 +205,26 @@ func (s *Server) onJoin(c *gosocketio.Channel, code string, id uint64) {
 
 		c.BroadcastTo(conn.code, "join", []interface{}{c.Id(), id})
 
+		s.playerIdMutex.Lock()
+		s.playerIds[c.Id()] = id
+		s.playerIdMutex.Unlock()
+
 		idMap := make(map[string]uint64)
 
 		s.playerIdMutex.RLock()
 
+		var chId string
+
 		for _, ch := range c.List(conn.code) {
-			if ch.Id() == c.Id() {
+			chId = ch.Id()
+
+			if chId == c.Id() {
 				continue
 			}
 
-			idMap[ch.Id()] = s.playerIds[ch.Id()]
+			if playerId, ok := s.playerIds[chId]; ok {
+				idMap[chId] = playerId
+			}
 		}
 
 		s.playerIdMutex.RUnlock()
@@ -250,6 +261,7 @@ func (s *Server) onId(c *gosocketio.Channel, id uint64) {
 			"id":     c.Id(),
 			"gameId": id,
 		}).Debug("Client set id")
+
 		c.BroadcastTo(conn.code, "setId", []interface{}{c.Id(), id})
 	}
 }

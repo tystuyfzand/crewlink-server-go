@@ -28,3 +28,10 @@ func (c *ConnectionMap) Get(id string) *Connection {
 
 	return c.m[id]
 }
+
+func (c *ConnectionMap) Remove(id string) {
+	c.l.Lock()
+	defer c.l.Unlock()
+
+	delete(c.m, id)
+}

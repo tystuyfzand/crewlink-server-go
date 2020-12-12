@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -19,15 +18,6 @@ type healthStatus struct {
 	Address           string   `json:"address"`
 	Name              string   `json:"name"`
 	SupportedVersions []string `json:"supportedVersions"`
-}
-
-// urlCleaner resolves an issue where CrewLink double slashes the file path
-func urlCleaner(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		r.URL.Path = strings.Replace(r.URL.Path, "//", "/", -1)
-
-		next.ServeHTTP(w, r)
-	})
 }
 
 // schemeSetter sets the request's scheme, if possible.
