@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	gosocketio "github.com/tystuyfzand/gosf-socketio"
@@ -7,7 +7,7 @@ import (
 
 type Connection struct {
 	channel *gosocketio.Channel
-	code string
+	code    string
 }
 
 type ConnectionMap struct {

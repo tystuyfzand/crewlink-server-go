@@ -11,7 +11,7 @@ COPY . .
 
 RUN go get -u github.com/gobuffalo/packr/v2/... && packr2
 
-RUN go build -o crewlink-server .
+RUN go build -o crewlink-server . cmd/main.go
 
 FROM alpine
 
