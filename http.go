@@ -2,7 +2,9 @@ package server
 
 import (
 	"encoding/json"
+	"github.com/go-chi/chi"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -20,16 +22,34 @@ type healthStatus struct {
 	SupportedVersions []string `json:"supportedVersions"`
 }
 
+// urlCleaner resolves an issue where CrewLink double slashes the file path
+func urlCleaner(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rctx := chi.RouteContext(r.Context())
+
+		routePath := rctx.RoutePath
+		if routePath == "" {
+			if r.URL.RawPath != "" {
+				routePath = r.URL.RawPath
+			} else {
+				routePath = r.URL.Path
+			}
+			rctx.RoutePath = strings.Replace(routePath, "//", "/", -1)
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 // schemeSetter sets the request's scheme, if possible.
 func schemeSetter(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Scheme == "" {
 			r.URL.Scheme = "http"
-		}
 
-		// TODO Use a trusted proxy list instead
-		if forwardedProto := r.Header.Get("X-Forwarded-Proto"); forwardedProto != "" {
-			r.URL.Scheme = forwardedProto
+			if r.TLS != nil {
+				r.URL.Scheme = "https"
+			}
 		}
 
 		next.ServeHTTP(w, r)

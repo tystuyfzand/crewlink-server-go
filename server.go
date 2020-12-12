@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/gobuffalo/packr/v2"
@@ -32,6 +33,7 @@ type Signal struct {
 // Server represents a CrewLink server instance.
 type Server struct {
 	server        *gosocketio.Server
+	mux           *chi.Mux
 	connected     int64
 	connections   *ConnectionMap
 	playerIds     map[string]uint64
@@ -41,6 +43,7 @@ type Server struct {
 	Name              string
 	supportedVersions []string
 	peerConfig        *PeerConfig
+	certificatePath   string
 }
 
 // NewServer constructs a new server with the given options.
@@ -49,6 +52,7 @@ func NewServer(opts ...Option) *Server {
 		connections:   &ConnectionMap{m: make(map[string]*Connection), l: &sync.RWMutex{}},
 		playerIds:     make(map[string]uint64),
 		playerIdMutex: &sync.RWMutex{},
+		mux:           chi.NewRouter(),
 	}
 
 	for _, opt := range opts {
@@ -76,6 +80,20 @@ func WithVersions(versions []string) Option {
 func WithPeerConfig(config *PeerConfig) Option {
 	return func(s *Server) {
 		s.peerConfig = config
+	}
+}
+
+// WithMiddleware passes middleware into chi's mux
+func WithMiddleware(middlewares ...func(http.Handler) http.Handler) Option {
+	return func(s *Server) {
+		s.mux.Use(middlewares...)
+	}
+}
+
+// WithCertificates enables TLS using the specified directory
+func WithCertificates(certificatePath string) Option {
+	return func(s *Server) {
+		s.certificatePath = certificatePath
 	}
 }
 
@@ -122,21 +140,20 @@ func (s *Server) Start(addr string) error {
 		s.supportedVersions = supportedVersions
 	}
 
-	r := chi.NewRouter()
-	r.Use(middleware.Logger, middleware.RealIP, middleware.CleanPath, schemeSetter)
+	s.mux.Use(urlCleaner, schemeSetter)
 
-	r.Handle("/socket.io/", s.server)
+	s.mux.Handle("/socket.io/", s.server)
 
 	offsetHandler := http.FileServer(offsetBox)
 
 	for _, name := range offsetBox.List() {
-		r.Handle("/"+name, offsetHandler)
+		s.mux.Handle("/"+name, offsetHandler)
 	}
 
 	logoBytes, _ := assetBox.Find("images/logo.png")
 
 	// TODO better way to do this?
-	r.Get("/logo.png", func(w http.ResponseWriter, r *http.Request) {
+	s.mux.Get("/logo.png", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		w.Header().Set("Content-Length", strconv.Itoa(len(logoBytes)))
 		w.Header().Set("Cache-Control", "max-age:290304000, public")
@@ -146,18 +163,49 @@ func (s *Server) Start(addr string) error {
 		w.Write(logoBytes)
 	})
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+	s.mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		mainTemplate.Execute(w, stats{
 			Address:   r.URL.Scheme + "://" + r.Host,
 			Connected: atomic.LoadInt64(&s.connected),
 		})
 	})
 
-	r.Get("/health", s.httpHealth)
+	s.mux.Get("/health", s.httpHealth)
 
 	log.WithField("address", addr).Info("Listening")
 
-	return http.ListenAndServe(addr, r)
+	if s.certificatePath != "" {
+		s.mux.Use(middleware.SetHeader("Strict-Transport-Security", "max-age=63072000; includeSubDomains"))
+
+		cfg := &tls.Config{
+			MinVersion:               tls.VersionTLS12,
+			CurvePreferences:         []tls.CurveID{tls.CurveP521, tls.CurveP384, tls.CurveP256},
+			PreferServerCipherSuites: true,
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+				tls.TLS_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_RSA_WITH_AES_256_CBC_SHA,
+			},
+		}
+
+		srv := &http.Server{
+			Addr:         addr,
+			Handler:      s.mux,
+			TLSConfig:    cfg,
+			TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler), 0),
+		}
+
+		certFile, keyFile, err := findCertificates(s.certificatePath)
+
+		if err != nil {
+			return err
+		}
+
+		return srv.ListenAndServeTLS(certFile, keyFile)
+	}
+
+	return http.ListenAndServe(addr, s.mux)
 }
 
 // onConnection handles new socket.io connections

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"github.com/chi-middleware/logrus-logger"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/tystuyfzand/proxy"
 	"meow.tf/crewlink-server"
 	"strings"
 )
@@ -10,6 +12,9 @@ import (
 func main() {
 	viper.SetDefault("address", ":9736")
 	viper.SetDefault("name", "CrewLink-Go")
+	viper.SetDefault("trustedProxies", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
+	viper.SetDefault("logRequests", false)
+	viper.SetDefault("certificatePath", "")
 
 	viper.AutomaticEnv()
 
@@ -47,6 +52,30 @@ func main() {
 		}
 
 		opts = append(opts, server.WithPeerConfig(peerConfig))
+	}
+
+	if trustedProxies := viper.GetString("trustedProxies"); trustedProxies != "" {
+		forwardedOpts := proxy.NewForwardedHeadersOptions()
+
+		networks := strings.Split(trustedProxies, ",")
+
+		for _, network := range networks {
+			if strings.Contains(network, "/") {
+				forwardedOpts.AddTrustedNetwork(network)
+			} else {
+				forwardedOpts.AddTrustedProxy(network)
+			}
+		}
+
+		opts = append(opts, server.WithMiddleware(proxy.ForwardedHeaders(forwardedOpts)))
+	}
+
+	if viper.GetBool("logRequests") {
+		opts = append(opts, server.WithMiddleware(logger.Logger("router", log.StandardLogger())))
+	}
+
+	if certificatePath := viper.GetString("certificatePath"); certificatePath != "" {
+		opts = append(opts, server.WithCertificates(certificatePath))
 	}
 
 	s := server.NewServer(opts...)
