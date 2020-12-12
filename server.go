@@ -44,6 +44,7 @@ type Server struct {
 	supportedVersions []string
 	peerConfig        *PeerConfig
 	certificatePath   string
+	turnServer        *TURNServer
 }
 
 // NewServer constructs a new server with the given options.
@@ -80,6 +81,13 @@ func WithVersions(versions []string) Option {
 func WithPeerConfig(config *PeerConfig) Option {
 	return func(s *Server) {
 		s.peerConfig = config
+	}
+}
+
+// WithTURNServer sets the server's TURN Server instance
+func WithTURNServer(server *TURNServer) Option {
+	return func(s *Server) {
+		s.turnServer = server
 	}
 }
 
@@ -216,11 +224,30 @@ func (s *Server) onConnection(c *gosocketio.Channel) {
 
 	s.connections.Set(c.Id(), &Connection{channel: c})
 
+	// Upcoming support for peer config
+	// See: https://github.com/ottomated/CrewLink-server/pull/28
+	// AND https://github.com/ottomated/CrewLink/pull/149
 	if s.peerConfig != nil {
-		// Upcoming support for peer config
-		// See: https://github.com/ottomated/CrewLink-server/pull/28
-		// AND https://github.com/ottomated/CrewLink/pull/149
-		c.Emit("peerConfig", s.peerConfig)
+		if s.turnServer != nil {
+			// Add user for the server and configure it
+			password, err := s.turnServer.AddUser(c.Id())
+
+			if err != nil {
+				return
+			}
+
+			config := *s.peerConfig
+
+			// TODO: c.Request().Host might not be perfect, but should get us a host they can use for now.
+			config.TurnServers = []ICEServer{
+				{URL: "turn:" + c.Request().Host, Username: c.Id(), Credential: password},
+			}
+
+			c.Emit("peerConfig", config)
+		} else {
+			// Static TURN config
+			c.Emit("peerConfig", s.peerConfig)
+		}
 	}
 }
 
@@ -231,6 +258,10 @@ func (s *Server) onDisconnection(c *gosocketio.Channel) {
 	atomic.AddInt64(&s.connected, -1)
 
 	s.connections.Remove(c.Id())
+
+	if s.turnServer != nil {
+		s.turnServer.RemoveUser(c.Id())
+	}
 
 	s.playerIdMutex.Lock()
 	defer s.playerIdMutex.Unlock()

@@ -11,6 +11,7 @@ import (
 
 func main() {
 	viper.SetDefault("address", ":9736")
+	viper.SetDefault("turnAddress", "")
 	viper.SetDefault("name", "CrewLink-Go")
 	viper.SetDefault("trustedProxies", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
 	viper.SetDefault("logRequests", false)
@@ -76,6 +77,16 @@ func main() {
 
 	if certificatePath := viper.GetString("certificatePath"); certificatePath != "" {
 		opts = append(opts, server.WithCertificates(certificatePath))
+	}
+
+	if turnAddress := viper.GetString("turnAddress"); turnAddress != "" {
+		turnServer := server.NewTURNServer()
+
+		if err := turnServer.Start(turnAddress); err != nil {
+			log.WithError(err).Fatalln("Unable to start TURN server")
+		}
+
+		opts = append(opts, server.WithTURNServer(turnServer))
 	}
 
 	s := server.NewServer(opts...)

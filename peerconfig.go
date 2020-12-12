@@ -1,12 +1,7 @@
 package server
 
-// StunServer configures the STUN server for clients
-type StunServer struct {
-	URL string `json:"url" mapstructure:"url"`
-}
-
-// TurnServer configures the TURN server for clients
-type TurnServer struct {
+// ICEServer configures the TURN/STUN servers for clients
+type ICEServer struct {
 	URL        string `json:"url" mapstructure:"url"`
 	Username   string `json:"username" mapstructure:"username"`
 	Credential string `json:"credential" mapstructure:"credential"`
@@ -14,7 +9,7 @@ type TurnServer struct {
 
 // PeerConfig represents the peerConfig event from crewlink
 type PeerConfig struct {
-	ForceRelayOnly bool         `json:"forceRelayOnly" mapstructure:"forceRelayOnly"`
-	StunServers    []StunServer `json:"stunServers" mapstructure:"stunServers"`
-	TurnServers    []TurnServer `json:"turnServers" mapstructure:"turnServers"`
+	ForceRelayOnly bool        `json:"forceRelayOnly" mapstructure:"forceRelayOnly"`
+	StunServers    []ICEServer `json:"stunServers" mapstructure:"stunServers"`
+	TurnServers    []ICEServer `json:"turnServers" mapstructure:"turnServers"`
 }
