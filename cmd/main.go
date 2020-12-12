@@ -53,7 +53,7 @@ func main() {
 
 	s.Setup()
 
-	err = s.Start(viper.GetString("address"))
+	err := s.Start(viper.GetString("address"))
 
 	if err != nil {
 		log.WithError(err).Fatalln("Unable to start server")
