@@ -212,6 +212,8 @@ github.com/tystuyfzand/gosf-socketio v0.0.0-20201211021827-4134a4acb784 h1:CY3ET
 github.com/tystuyfzand/gosf-socketio v0.0.0-20201211021827-4134a4acb784/go.mod h1:RHOLfWazNDLReuMrVmgXEFrF++NvCtn3qgKa7aO/IwI=
 github.com/tystuyfzand/gosf-socketio v0.0.0-20201211030854-62e98584205b h1:nlRkUYApzkR4hGEOoTlwf15PWS9wkbMFquMhHdj4v0Y=
 github.com/tystuyfzand/gosf-socketio v0.0.0-20201211030854-62e98584205b/go.mod h1:RHOLfWazNDLReuMrVmgXEFrF++NvCtn3qgKa7aO/IwI=
+github.com/tystuyfzand/gosf-socketio v0.0.0-20201212134800-34003357bfc9 h1:i5TbuNHon5G8TROQJSoV2CA29i6yFGryQO8cQnUykOs=
+github.com/tystuyfzand/gosf-socketio v0.0.0-20201212134800-34003357bfc9/go.mod h1:RHOLfWazNDLReuMrVmgXEFrF++NvCtn3qgKa7aO/IwI=
 github.com/ugorji/go v1.1.4/go.mod h1:uQMGLiO92mf5W77hV/PUCpI3pbzQx3CRekS0kk+RGrc=
 github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2/go.mod h1:UETIi67q53MR2AWcXfiuqkDkRtnGDLqkBTpCHuJHxtU=
 github.com/xordataexchange/crypt v0.0.3-0.20170626215501-b2862e3d0a77/go.mod h1:aYKd//L2LvnjZzWKhF00oedf4jCCReLcmhLdhm1A27Q=
