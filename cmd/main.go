@@ -12,7 +12,7 @@ import (
 func main() {
 	viper.SetDefault("address", ":9736")
 	viper.SetDefault("name", "CrewLink-Go")
-	viper.SetDefault("trustedProxies", "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
+	viper.SetDefault("trustedProxies", "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
 	viper.SetDefault("logRequests", false)
 	viper.SetDefault("certificatePath", "")
 
