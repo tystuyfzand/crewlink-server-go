@@ -2,6 +2,38 @@ kind: pipeline
 name: default
 
 steps:
+  - name: build
+    image: golang:alpine
+    volumes:
+      - name: dist
+        path: /dist
+    commands:
+      - export CGO_ENABLED=0
+      - GOOS=linux GOARCH=arm go build -o /dist/crewlink-linux-arm cmd/main.go
+      - GOOS=linux GOARCH=arm64 go build -o /dist/crewlink-linux-arm64 cmd/main.go
+      - GOOS=linux GOARCH=386 go build -o /dist/crewlink-linux-32bit cmd/main.go
+      - GOOS=linux GOARCH=amd64 go build -o /dist/crewlink-linux-64bit cmd/main.go
+      - GOOS=windows GOARCH=386 go build -o /dist/crewlink-windows-32bit.exe cmd/main.go
+      - GOOS=windows GOARCH=amd64 go build -o /dist/crewlink-windows-64bit.exe cmd/main.go
+  - name: publish
+    image: plugins/github-release
+    volumes:
+      - name: dist
+        path: /dist
+    settings:
+      api_key:
+        from_secret: github_api_key
+      files:
+        - /dist/*
+      checksum:
+        - md5
+        - sha1
+        - sha256
+        - sha512
+        - adler32
+        - crc32
+    when:
+      event: tag
   - name: docker
     image: plugins/docker
     settings:
@@ -11,3 +43,7 @@ steps:
         from_secret: docker_username
       password:
         from_secret: docker_password
+
+volumes:
+  - name: dist
+    temp: {}
