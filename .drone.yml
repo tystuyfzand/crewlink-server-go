@@ -29,9 +29,6 @@ steps:
         - md5
         - sha1
         - sha256
-        - sha512
-        - adler32
-        - crc32
     when:
       event: tag
   - name: docker
