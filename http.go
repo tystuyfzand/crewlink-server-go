@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/go-chi/chi"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -58,11 +59,21 @@ func schemeSetter(next http.Handler) http.Handler {
 
 // httpHealth is the handler for the "/health" endpoint.
 func (s *Server) httpHealth(w http.ResponseWriter, r *http.Request) {
-	json.NewEncoder(w).Encode(healthStatus{
+	b, err := json.Marshal(healthStatus{
 		Uptime:            uint64(time.Now().Sub(s.startTime) / time.Second),
 		Connections:       atomic.LoadInt64(&s.connected),
 		Address:           r.URL.Scheme + "://" + r.Host,
 		Name:              s.Name,
 		SupportedVersions: s.supportedVersions,
 	})
+
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Length", strconv.Itoa(len(b)))
+
+	w.Write(b)
 }

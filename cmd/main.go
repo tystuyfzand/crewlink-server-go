@@ -3,18 +3,35 @@ package main
 import (
 	"github.com/chi-middleware/logrus-logger"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/tystuyfzand/proxy"
 	"meow.tf/crewlink-server"
 	"strings"
 )
 
-func main() {
+// setupFlags sets up base pflag values
+func setupFlags() {
+	pflag.String("address", "", "Server bind address")
+	pflag.String("name", "", "Server name")
+	pflag.String("trustedProxies", "", "Trusted proxy addresses, comma separated")
+	pflag.Bool("logRequests", false, "Flag to enable request logging in the router")
+	pflag.String("certificatePath", "", "SSL Certificate Path")
+	pflag.String("dataPath", "", "Web Data Path")
+	pflag.String("peerConfig", "", "Peer config file path")
+
+	pflag.Parse()
+}
+
+// setupConfiguration binds all the viper default values, sets up pflag integration
+// and parses the config file, if possible.
+func setupConfiguration() {
 	viper.SetDefault("address", ":9736")
 	viper.SetDefault("name", "CrewLink-Go")
 	viper.SetDefault("trustedProxies", "127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16")
 	viper.SetDefault("logRequests", false)
 	viper.SetDefault("certificatePath", "")
+	viper.SetDefault("dataPath", "")
 
 	viper.AutomaticEnv()
 
@@ -23,8 +40,15 @@ func main() {
 	viper.AddConfigPath("$HOME/.crewlink-server")
 	viper.AddConfigPath(".")
 
+	viper.BindPFlags(pflag.CommandLine)
+
 	// Optionally load config
 	viper.ReadInConfig()
+}
+
+func main() {
+	setupFlags()
+	setupConfiguration()
 
 	if logLevelStr := viper.GetString("logLevel"); logLevelStr != "" {
 		level, err := log.ParseLevel(logLevelStr)
@@ -38,6 +62,10 @@ func main() {
 
 	opts := []server.Option{
 		server.WithName(viper.GetString("name")),
+	}
+
+	if dataPath := viper.GetString("dataPath"); dataPath != "" {
+		opts = append(opts, server.WithDataPath(dataPath))
 	}
 
 	if versions := viper.GetString("versions"); versions != "" {

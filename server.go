@@ -9,7 +9,10 @@ import (
 	"github.com/tystuyfzand/gosf-socketio"
 	"github.com/tystuyfzand/gosf-socketio/transport"
 	"html/template"
+	"io/ioutil"
 	"net/http"
+	"os"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,27 +35,26 @@ type Signal struct {
 
 // Server represents a CrewLink server instance.
 type Server struct {
-	server        *gosocketio.Server
-	mux           *chi.Mux
-	connected     int64
-	connections   *ConnectionMap
-	playerIds     map[string]uint64
-	playerIdMutex *sync.RWMutex
-	startTime     time.Time
+	server      *gosocketio.Server
+	mux         *chi.Mux
+	connected   int64
+	connections *ConnectionMap
+	playerIds   *PlayerIdMap
+	startTime   time.Time
 
 	Name              string
 	supportedVersions []string
 	peerConfig        *PeerConfig
 	certificatePath   string
+	dataPath          string
 }
 
 // NewServer constructs a new server with the given options.
 func NewServer(opts ...Option) *Server {
 	server := &Server{
-		connections:   &ConnectionMap{m: make(map[string]*Connection), l: &sync.RWMutex{}},
-		playerIds:     make(map[string]uint64),
-		playerIdMutex: &sync.RWMutex{},
-		mux:           chi.NewRouter(),
+		connections: &ConnectionMap{m: make(map[string]*Connection), l: &sync.RWMutex{}},
+		playerIds:   &PlayerIdMap{m: make(map[string]uint64), l: &sync.RWMutex{}},
+		mux:         chi.NewRouter(),
 	}
 
 	for _, opt := range opts {
@@ -94,6 +96,12 @@ func WithMiddleware(middlewares ...func(http.Handler) http.Handler) Option {
 func WithCertificates(certificatePath string) Option {
 	return func(s *Server) {
 		s.certificatePath = certificatePath
+	}
+}
+
+func WithDataPath(dataPath string) Option {
+	return func(s *Server) {
+		s.dataPath = dataPath
 	}
 }
 
@@ -150,24 +158,57 @@ func (s *Server) Start(addr string) error {
 		s.mux.Handle("/"+name, offsetHandler)
 	}
 
-	logoBytes, _ := assetBox.Find("images/logo.png")
+	bindLogo := true
 
-	// TODO better way to do this?
-	s.mux.Get("/logo.png", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "image/png")
-		w.Header().Set("Content-Length", strconv.Itoa(len(logoBytes)))
-		w.Header().Set("Cache-Control", "max-age:290304000, public")
-		w.Header().Set("Last-Modified", cacheSince)
-		w.Header().Set("Expires", time.Now().AddDate(0, 0, 30).Format(http.TimeFormat))
+	if s.dataPath != "" {
+		templatePath := path.Join(s.dataPath, "index.gohtml")
 
-		w.Write(logoBytes)
-	})
+		if _, err := os.Stat(templatePath); !os.IsNotExist(err) {
+			templateData, err := ioutil.ReadFile(templatePath)
+
+			if err != nil {
+				return err
+			}
+
+			mainTemplate = template.Must(template.New("").Parse(string(templateData)))
+		}
+
+		logoPath := path.Join(s.dataPath, "images/logo.png")
+
+		if _, err := os.Stat(logoPath); !os.IsNotExist(err) {
+			bindLogo = false
+		}
+
+		s.mux.Handle("/*", http.FileServer(http.Dir(s.dataPath)))
+	}
+
+	if bindLogo {
+		logoBytes, _ := assetBox.Find("images/logo.png")
+
+		// TODO better way to do this?
+		s.mux.Get("/logo.png", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "image/png")
+			w.Header().Set("Content-Length", strconv.Itoa(len(logoBytes)))
+			w.Header().Set("Cache-Control", "max-age:290304000, public")
+			w.Header().Set("Last-Modified", cacheSince)
+			w.Header().Set("Expires", time.Now().AddDate(0, 0, 30).Format(http.TimeFormat))
+
+			w.Write(logoBytes)
+		})
+	}
 
 	s.mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		mainTemplate.Execute(w, stats{
+		err := mainTemplate.Execute(w, stats{
 			Address:   r.URL.Scheme + "://" + r.Host,
 			Connected: atomic.LoadInt64(&s.connected),
 		})
+
+		if err != nil {
+			log.WithError(err).Warning("Failed to render template")
+
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte("Sorry, there was an error rendering this page."))
+		}
 	})
 
 	s.mux.Get("/health", s.httpHealth)
@@ -232,10 +273,7 @@ func (s *Server) onDisconnection(c *gosocketio.Channel) {
 
 	s.connections.Remove(c.Id())
 
-	s.playerIdMutex.Lock()
-	defer s.playerIdMutex.Unlock()
-
-	delete(s.playerIds, c.Id())
+	s.playerIds.Remove(c.Id())
 }
 
 // onJoin handles lobby joins, setting their room and sending current players
@@ -253,31 +291,19 @@ func (s *Server) onJoin(c *gosocketio.Channel, code string, id uint64) {
 
 		c.BroadcastTo(conn.code, "join", []interface{}{c.Id(), id})
 
-		s.playerIdMutex.Lock()
-		s.playerIds[c.Id()] = id
-		s.playerIdMutex.Unlock()
+		connList := c.List(conn.code)
 
-		idMap := make(map[string]uint64)
+		cids := make([]string, len(connList))
 
-		s.playerIdMutex.RLock()
-
-		var chId string
-
-		for _, ch := range c.List(conn.code) {
-			chId = ch.Id()
-
-			if chId == c.Id() {
+		for i, ch := range connList {
+			if ch.Id() == c.Id() {
 				continue
 			}
 
-			if playerId, ok := s.playerIds[chId]; ok {
-				idMap[chId] = playerId
-			}
+			cids[i] = ch.Id()
 		}
 
-		s.playerIdMutex.RUnlock()
-
-		c.Emit("setIds", idMap)
+		c.Emit("setIds", s.playerIds.MapOf(cids))
 	}
 }
 
@@ -298,10 +324,6 @@ func (s *Server) onLeave(c *gosocketio.Channel) {
 
 // onId is used when a user's id is set
 func (s *Server) onId(c *gosocketio.Channel, id uint64) {
-	s.playerIdMutex.Lock()
-	s.playerIds[c.Id()] = id
-	s.playerIdMutex.Unlock()
-
 	conn := s.connections.Get(c.Id())
 
 	if conn != nil {
@@ -310,12 +332,30 @@ func (s *Server) onId(c *gosocketio.Channel, id uint64) {
 			"gameId": id,
 		}).Debug("Client set id")
 
+		if conn.code == "" {
+			return
+		}
+
+		s.playerIds.Set(c.Id(), id)
+
 		c.BroadcastTo(conn.code, "setId", []interface{}{c.Id(), id})
 	}
 }
 
 // onSignal handles the WebRTC signal event
 func (s *Server) onSignal(c *gosocketio.Channel, signal Signal) {
+	conn := s.connections.Get(c.Id())
+
+	if conn == nil || conn.code == "" {
+		return
+	}
+
+	otherConn := s.connections.Get(signal.To)
+
+	if otherConn == nil || otherConn.code == "" || otherConn.code != conn.code {
+		return
+	}
+
 	ch, err := s.server.GetChannel(signal.To)
 
 	if err == nil {
